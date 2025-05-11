@@ -5,13 +5,23 @@ import {
   PanelGroup,
   PanelResizeHandle,
 } from "react-resizable-panels";
+import dynamic from 'next/dynamic';
 import { FileExplorer } from '@/components/FileExplorer';
 import { EditorPane } from '@/components/EditorPane';
-import { OutputPane } from '@/components/OutputPane';
+import { LivePreview } from '@/components/LivePreview';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from "@/components/ui/skeleton";
 import { Save } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
+
+const TerminalComponentWithNoSSR = dynamic(
+  () => import('@/components/TerminalComponent').then(mod => mod.TerminalComponent),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="w-full h-full" />
+  }
+);
 
 export function AppLayout() {
   const { saveActiveFile } = useAppContext();
@@ -20,7 +30,6 @@ export function AppLayout() {
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <header className="h-12 border-b px-4 flex items-center justify-between shrink-0 bg-card">
         <div className="flex items-center gap-2">
-          {/* You can use an actual SVG/Image logo here if you have one */}
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary">
             <path d="M10 10l4 4m0-4l-4 4"/>
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -34,26 +43,39 @@ export function AppLayout() {
           <ThemeToggle />
         </div>
       </header>
-      <main className="flex-grow_overflow-hidden"> {/* Ensure PanelGroup takes remaining space */}
+      <main className="flex-grow overflow-hidden"> {/* Corrected class name */}
         <PanelGroup direction="horizontal" className="h-full w-full">
-          <Panel id="file-explorer" defaultSize={20} minSize={15} maxSize={40} collapsible={true} className="bg-card">
+          {/* Left Panel: File Explorer */}
+          <Panel id="file-explorer" defaultSize={20} minSize={15} maxSize={35} collapsible={true} className="bg-card">
             <FileExplorer />
           </Panel>
           <PanelResizeHandle className="resize-handle-horizontal w-[1px] bg-border data-[resize-handle-active]:bg-primary transition-colors">
             <div className="w-full h-full" />
           </PanelResizeHandle>
-          <Panel id="main-content" defaultSize={80}>
+
+          {/* Middle Panel: Editor and Terminal */}
+          <Panel id="middle-content" defaultSize={50} minSize={30}>
             <PanelGroup direction="vertical" className="h-full">
+              {/* Top: Editor Pane */}
               <Panel id="editor-pane" defaultSize={65} minSize={30}>
                 <EditorPane />
               </Panel>
               <PanelResizeHandle className="resize-handle-vertical h-[1px] bg-border data-[resize-handle-active]:bg-primary transition-colors">
                 <div className="w-full h-full" />
               </PanelResizeHandle>
-              <Panel id="output-pane" defaultSize={35} minSize={20} collapsible={true}>
-                <OutputPane />
+              {/* Bottom: Terminal */}
+              <Panel id="terminal-pane" defaultSize={35} minSize={20} collapsible={true}>
+                <TerminalComponentWithNoSSR />
               </Panel>
             </PanelGroup>
+          </Panel>
+          <PanelResizeHandle className="resize-handle-horizontal w-[1px] bg-border data-[resize-handle-active]:bg-primary transition-colors">
+            <div className="w-full h-full" />
+          </PanelResizeHandle>
+
+          {/* Right Panel: Preview */}
+          <Panel id="preview-pane" defaultSize={30} minSize={20} collapsible={true}>
+            <LivePreview />
           </Panel>
         </PanelGroup>
       </main>
