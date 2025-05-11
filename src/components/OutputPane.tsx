@@ -2,7 +2,17 @@
 "use client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LivePreview } from "./LivePreview";
-import { TerminalComponent } from "./TerminalComponent"; // Renamed to avoid conflicts
+import dynamic from 'next/dynamic';
+import { Skeleton } from "@/components/ui/skeleton";
+
+// Dynamically import TerminalComponent with SSR disabled
+const TerminalComponentWithNoSSR = dynamic(
+  () => import('./TerminalComponent').then(mod => mod.TerminalComponent), 
+  { 
+    ssr: false,
+    loading: () => <Skeleton className="w-full h-full" /> // Optional loading state
+  }
+);
 
 export function OutputPane() {
   return (
@@ -15,8 +25,9 @@ export function OutputPane() {
         <LivePreview />
       </TabsContent>
       <TabsContent value="terminal" className="flex-grow_h-full_overflow-auto_mt-0"> {/* Ensure content fills space */}
-        <TerminalComponent />
+        <TerminalComponentWithNoSSR />
       </TabsContent>
     </Tabs>
   );
 }
+

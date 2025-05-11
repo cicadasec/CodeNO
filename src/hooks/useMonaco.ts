@@ -1,6 +1,6 @@
 
 "use client";
-import { useEffect }_from_ 'react';
+import { useEffect } from 'react';
 import type { editor } from 'monaco-editor';
 import { useAppContext } from '@/contexts/AppContext';
 import { loader } from '@monaco-editor/react';
@@ -51,3 +51,4 @@ export function getLanguageForFile(fileName: string): string {
       return 'plaintext';
   }
 }
+
