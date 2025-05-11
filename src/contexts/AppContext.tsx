@@ -1,4 +1,3 @@
-
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
@@ -53,14 +52,33 @@ document.addEventListener('DOMContentLoaded', () => {
 });`
 };
 
+const initialOpenFiles: OpenFile[] = [];
+const initialActiveFileId: string | null = null;
+const initialTheme: Theme = 'light';
+const initialCurrentPath: string[] = ['root'];
+
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [fileSystem, setFileSystem] = useLocalStorage<Record<string, FileSystemItem>>('codemirror-fs', initialFileSystemData);
-  const [fileContents, setFileContents] = useLocalStorage<Record<string, string>>('codemirror-fc', initialFileContents);
-  const [openFiles, setOpenFiles] = useLocalStorage<OpenFile[]>('codemirror-openfiles', []);
-  const [activeFileId, setActiveFileIdState] = useLocalStorage<string | null>('codemirror-activefile', null);
-  const [theme, setThemeState] = useLocalStorage<Theme>('codemirror-theme', 'light');
-  const [currentPath, setCurrentPath] = useLocalStorage<string[]>('codemirror-currentpath', ['root']); // Path IDs
+  const [hasMounted, setHasMounted] = useState(false);
+
+  const [rawFileSystem, setRawFileSystem] = useLocalStorage<Record<string, FileSystemItem>>('codemirror-fs', initialFileSystemData);
+  const [rawFileContents, setRawFileContents] = useLocalStorage<Record<string, string>>('codemirror-fc', initialFileContents);
+  const [rawOpenFiles, setRawOpenFiles] = useLocalStorage<OpenFile[]>('codemirror-openfiles', initialOpenFiles);
+  const [rawActiveFileId, setRawActiveFileIdState] = useLocalStorage<string | null>('codemirror-activefile', initialActiveFileId);
+  const [rawTheme, setRawThemeState] = useLocalStorage<Theme>('codemirror-theme', initialTheme);
+  const [rawCurrentPath, setRawCurrentPath] = useLocalStorage<string[]>('codemirror-currentpath', initialCurrentPath); // Path IDs
+
+  useEffect(() => {
+    setHasMounted(true);
+  }, []);
+
+  const fileSystem = hasMounted ? rawFileSystem : initialFileSystemData;
+  const fileContents = hasMounted ? rawFileContents : initialFileContents;
+  const openFiles = hasMounted ? rawOpenFiles : initialOpenFiles;
+  const activeFileId = hasMounted ? rawActiveFileId : initialActiveFileId;
+  const theme = hasMounted ? rawTheme : initialTheme;
+  const currentPathIds = hasMounted ? rawCurrentPath : initialCurrentPath;
+
 
   useEffect(() => {
     document.documentElement.classList.remove('light', 'dark');
@@ -68,12 +86,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [theme]);
 
   const toggleTheme = useCallback(() => {
-    setThemeState(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-  }, [setThemeState]);
+    setRawThemeState(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
+  }, [setRawThemeState]);
 
   const setActiveFileId = useCallback((id: string | null) => {
-    setActiveFileIdState(id);
-  }, [setActiveFileIdState]);
+    setRawActiveFileIdState(id);
+  }, [setRawActiveFileIdState]);
 
   const addFile = useCallback((name: string, parentId: string) => {
     const parent = fileSystem[parentId];
@@ -88,14 +106,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const id = generateId();
     const newFile: FileSystemItem = { id, name, type: 'file', parentId };
-    setFileSystem(prev => ({
+    setRawFileSystem(prev => ({
       ...prev,
       [id]: newFile,
-      [parentId]: { ...parent, childrenIds: [...(parent.childrenIds || []), id] }
+      [parentId]: { ...prev[parentId], childrenIds: [...(prev[parentId]?.childrenIds || []), id] }
     }));
-    setFileContents(prev => ({ ...prev, [id]: '' }));
+    setRawFileContents(prev => ({ ...prev, [id]: '' }));
     toast({ title: "Success", description: `File "${name}" created.` });
-  }, [fileSystem, setFileSystem, setFileContents]);
+  }, [fileSystem, setRawFileSystem, setRawFileContents]);
 
   const addFolder = useCallback((name: string, parentId: string) => {
     const parent = fileSystem[parentId];
@@ -109,13 +127,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }
     const id = generateId();
     const newFolder: FileSystemItem = { id, name, type: 'folder', parentId, childrenIds: [] };
-    setFileSystem(prev => ({
+    setRawFileSystem(prev => ({
       ...prev,
       [id]: newFolder,
-      [parentId]: { ...parent, childrenIds: [...(parent.childrenIds || []), id] }
+      [parentId]: { ...prev[parentId], childrenIds: [...(prev[parentId]?.childrenIds || []), id] }
     }));
     toast({ title: "Success", description: `Folder "${name}" created.` });
-  }, [fileSystem, setFileSystem]);
+  }, [fileSystem, setRawFileSystem]);
 
   const renameItem = useCallback((id: string, newName: string) => {
     const item = fileSystem[id];
@@ -126,10 +144,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return;
     }
 
-    setFileSystem(prev => ({ ...prev, [id]: { ...item, name: newName } }));
-    setOpenFiles(prevOpen => prevOpen.map(f => f.id === id ? {...f, name: newName} : f));
+    setRawFileSystem(prev => ({ ...prev, [id]: { ...prev[id], name: newName } }));
+    setRawOpenFiles(prevOpen => prevOpen.map(f => f.id === id ? {...f, name: newName} : f));
     toast({ title: "Success", description: `Item renamed to "${newName}".` });
-  }, [fileSystem, setFileSystem, setOpenFiles]);
+  }, [fileSystem, setRawFileSystem, setRawOpenFiles]);
 
   const deleteItemRecursive = useCallback((itemId: string, currentFs: Record<string, FileSystemItem>, currentFc: Record<string, string>) => {
     const item = currentFs[itemId];
@@ -146,15 +164,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     }
     
-    // Remove content if it's a file
     if (item.type === 'file') {
       delete updatedFc[itemId];
     }
     
-    // Remove item itself
     delete updatedFs[itemId];
 
-    // Remove from parent's childrenIds
     if (item.parentId && updatedFs[item.parentId]) {
       updatedFs[item.parentId] = {
         ...updatedFs[item.parentId],
@@ -174,42 +189,45 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
     const { updatedFs, updatedFc } = deleteItemRecursive(id, fileSystem, fileContents);
     
-    setFileSystem(updatedFs);
-    setFileContents(updatedFc);
+    setRawFileSystem(updatedFs);
+    setRawFileContents(updatedFc);
 
-    setOpenFiles(prevOpen => prevOpen.filter(f => f.id !== id && !Object.keys(updatedFc).includes(f.id))); // also check if its children were deleted
+    setRawOpenFiles(prevOpen => prevOpen.filter(f => f.id !== id && !Object.keys(updatedFc).includes(f.id)));
 
-    if (activeFileId === id || (item.type === 'folder' && openFiles.some(f => f.id.startsWith(id)))) { // A bit simplistic check for children
+    if (activeFileId === id || (item.type === 'folder' && openFiles.some(f => f.id.startsWith(id)))) {
       setActiveFileId(null);
     }
     toast({ title: "Success", description: `Item "${item.name}" deleted.` });
-  }, [fileSystem, fileContents, activeFileId, openFiles, deleteItemRecursive, setFileSystem, setFileContents, setOpenFiles, setActiveFileId]);
+  }, [fileSystem, fileContents, activeFileId, openFiles, deleteItemRecursive, setRawFileSystem, setRawFileContents, setRawOpenFiles, setActiveFileId]);
   
   const openFile = useCallback((id: string) => {
     const item = fileSystem[id];
     if (!item || item.type !== 'file') return;
     if (!openFiles.find(f => f.id === id)) {
-      setOpenFiles(prev => [...prev, { id, name: item.name }]);
+      setRawOpenFiles(prev => [...prev, { id, name: item.name }]);
     }
     setActiveFileId(id);
-  }, [fileSystem, openFiles, setOpenFiles, setActiveFileId]);
+  }, [fileSystem, openFiles, setRawOpenFiles, setActiveFileId]);
 
   const closeFile = useCallback((id: string) => {
-    setOpenFiles(prev => prev.filter(f => f.id !== id));
+    setRawOpenFiles(prev => prev.filter(f => f.id !== id));
     if (activeFileId === id) {
-      const remainingFiles = openFiles.filter(f => f.id !== id);
-      setActiveFileId(remainingFiles.length > 0 ? remainingFiles[0].id : null);
+      const remainingFiles = openFiles.filter(f => f.id !== id); // uses potentially stale openFiles from closure
+      // To get the latest openFiles state if relying on it for next active:
+      setRawOpenFiles(currentOpenFiles => {
+        const filtered = currentOpenFiles.filter(f => f.id !==id);
+        setActiveFileId(filtered.length > 0 ? filtered[0].id : null);
+        return filtered;
+      })
     }
-  }, [openFiles, activeFileId, setOpenFiles, setActiveFileId]);
+  }, [activeFileId, openFiles, setRawOpenFiles, setActiveFileId]);
+
 
   const updateFileContent = useCallback((id: string, content: string) => {
-    setFileContents(prev => ({ ...prev, [id]: content }));
-  }, [setFileContents]);
+    setRawFileContents(prev => ({ ...prev, [id]: content }));
+  }, [setRawFileContents]);
 
   const saveFile = useCallback((id: string) => {
-    // Content is already updated in fileContents by updateFileContent
-    // This function is more of a conceptual save, as useLocalStorage saves on change.
-    // Here we could add a "dirty" flag and clear it.
     toast({ title: "Saved", description: `${fileSystem[id]?.name} saved.` });
   }, [fileSystem]);
 
@@ -226,7 +244,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const content = fileContents[fileId] || '';
 
     if (file.name.endsWith('.html')) {
-      // Try to find and inject style.css and script.js if they exist in the same directory
       const parentDir = fileSystem[file.parentId!];
       let cssContent = '';
       let jsContent = '';
@@ -243,7 +260,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         }
       }
       
-      // A simple way to inject: look for </head> and </body>
       let html = content;
       if (cssContent) {
         if (html.includes("</head>")) {
@@ -264,85 +280,93 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return content;
   }, [fileSystem, fileContents]);
 
-  // Terminal related functions
-  const getCurrentDirectoryId = useCallback(() => currentPath[currentPath.length - 1] || 'root', [currentPath]);
+  const getCurrentDirectoryId = useCallback(() => currentPathIds[currentPathIds.length - 1] || 'root', [currentPathIds]);
   
   const currentDirectoryItems = useCallback(() => {
+    if (!hasMounted) return []; // Don't compute if not mounted / fileSystem is initial
     const dirId = getCurrentDirectoryId();
     const dir = fileSystem[dirId];
     if (dir && dir.type === 'folder' && dir.childrenIds) {
       return dir.childrenIds.map(id => fileSystem[id]).filter(Boolean) as FileSystemItem[];
     }
     return [];
-  }, [fileSystem, getCurrentDirectoryId]);
+  }, [fileSystem, getCurrentDirectoryId, hasMounted]);
 
   const getItemByPath = useCallback((path: string): FileSystemItem | null => {
-    const parts = path.split('/').filter(p => p);
-    let currentItemId = 'root'; // Assume 'root' is always the starting point of absolute paths
-
-    if (path === '/' || path === '') return fileSystem['root'];
+    if (!hasMounted && path !== '/' && path !== '') return null; // Avoid complex logic if not mounted, allow root
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const currentFsCurrentPathIds = hasMounted ? rawCurrentPath : initialCurrentPath;
     
-    // Handle relative paths
+    const parts = path.split('/').filter(p => p);
+    let currentItemId = currentFsCurrentPathIds[currentFsCurrentPathIds.length -1] || 'root';
+
+    if (path === '/' || path === '') return currentFs['root'];
+    
     if (!path.startsWith('/')) {
-      currentItemId = getCurrentDirectoryId();
+      // currentItemId is already set to the last ID of current path
+    } else {
+        currentItemId = 'root'; // Absolute path starts from root
     }
     
     for (const part of parts) {
       if (part === '.') continue;
       if (part === '..') {
-        const currentItem = fileSystem[currentItemId];
+        const currentItem = currentFs[currentItemId];
         if (currentItem && currentItem.parentId) {
           currentItemId = currentItem.parentId;
         } else {
-          return null; // Cannot go up from root or item without parent
+          return null; 
         }
         continue;
       }
       
-      const currentDir = fileSystem[currentItemId];
+      const currentDir = currentFs[currentItemId];
       if (!currentDir || currentDir.type !== 'folder' || !currentDir.childrenIds) return null;
       
-      const foundChildId = currentDir.childrenIds.find(id => fileSystem[id]?.name === part);
+      const foundChildId = currentDir.childrenIds.find(id => currentFs[id]?.name === part);
       if (!foundChildId) return null;
       currentItemId = foundChildId;
     }
-    return fileSystem[currentItemId] || null;
-  }, [fileSystem, getCurrentDirectoryId]);
+    return currentFs[currentItemId] || null;
+  }, [hasMounted, rawFileSystem, rawCurrentPath]);
 
 
   const changeDirectory = useCallback((path: string): boolean => {
     const targetItem = getItemByPath(path);
     if (targetItem && targetItem.type === 'folder') {
-      // Reconstruct path IDs
       const newPathIds: string[] = [];
       let current = targetItem;
+      const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
       while(current) {
         newPathIds.unshift(current.id);
         if (!current.parentId) break;
-        current = fileSystem[current.parentId];
+        current = currentFs[current.parentId];
       }
-      setCurrentPath(newPathIds.length > 0 ? newPathIds : ['root']);
+      setRawCurrentPath(newPathIds.length > 0 ? newPathIds : ['root']);
       return true;
     }
     return false;
-  }, [getItemByPath, fileSystem, setCurrentPath]);
+  }, [getItemByPath, hasMounted, rawFileSystem, setRawCurrentPath]);
 
-  const getAbsolutePath = useCallback((targetPath: string): string => {
-    const item = getItemByPath(targetPath);
-    if (!item) return "/"; // Default to root if path is invalid
+  const getAbsolutePath = useCallback((targetPathInput: string): string => {
+    if (!hasMounted && targetPathInput !== '/') return "/";
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const item = getItemByPath(targetPathInput); // getItemByPath now respects hasMounted
+    if (!item) return "/"; 
     
     const pathParts: string[] = [];
     let current = item;
     while(current && current.id !== 'root') {
         pathParts.unshift(current.name);
-        if (!current.parentId) break; // Should not happen if fs is consistent
-        current = fileSystem[current.parentId];
+        if (!current.parentId) break; 
+        current = currentFs[current.parentId];
     }
     return `/${pathParts.join('/')}`;
-  }, [getItemByPath, fileSystem]);
+  }, [getItemByPath, hasMounted, rawFileSystem]);
 
 
   const getFilePath = useCallback((itemName: string): string | null => {
+    if (!hasMounted) return null;
     const dirId = getCurrentDirectoryId();
     const dir = fileSystem[dirId];
     if (dir && dir.type === 'folder' && dir.childrenIds) {
@@ -350,25 +374,33 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       return item ? item.id : null;
     }
     return null;
-  }, [fileSystem, getCurrentDirectoryId]);
+  }, [fileSystem, getCurrentDirectoryId, hasMounted]);
 
   const readFileContent = useCallback((filePathId: string): string | undefined => {
+    if (!hasMounted) return undefined;
     const item = fileSystem[filePathId];
     if (item && item.type === 'file') {
       return fileContents[filePathId];
     }
     return undefined;
-  }, [fileSystem, fileContents]);
+  }, [fileSystem, fileContents, hasMounted]);
 
+  const contextValue: AppContextType = {
+    fileSystem,
+    rootId: 'root',
+    openFiles,
+    activeFileId,
+    fileContents,
+    theme,
+    toggleTheme,
+    addFile, addFolder, renameItem, deleteItem, openFile, closeFile, setActiveFileId,
+    updateFileContent, saveFile, saveActiveFile, getFormattedContent,
+    currentPath: currentPathIds.map(id => (hasMounted ? rawFileSystem[id]?.name : initialFileSystemData[id]?.name) || 'unknown'),
+    currentDirectoryItems, changeDirectory, getFilePath, readFileContent, getAbsolutePath, getItemByPath,
+  };
 
   return (
-    <AppContext.Provider value={{
-      fileSystem, rootId: 'root', openFiles, activeFileId, fileContents, theme, toggleTheme,
-      addFile, addFolder, renameItem, deleteItem, openFile, closeFile, setActiveFileId,
-      updateFileContent, saveFile, saveActiveFile, getFormattedContent,
-      currentPath: currentPath.map(id => fileSystem[id]?.name || 'unknown'), // Return names for display
-      currentDirectoryItems, changeDirectory, getFilePath, readFileContent, getAbsolutePath, getItemByPath
-    }}>
+    <AppContext.Provider value={contextValue}>
       {children}
     </AppContext.Provider>
   );
