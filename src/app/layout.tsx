@@ -7,7 +7,7 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 
 export const metadata: Metadata = {
-  title: 'CodeMirror Lite',
+  title: 'Code NO',
   description: 'A lightweight in-browser code editor.',
 };
 

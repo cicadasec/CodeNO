@@ -34,7 +34,7 @@ export function AppLayout() {
             <path d="M10 10l4 4m0-4l-4 4"/>
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
           </svg>
-          <h1 className="text-xl font-semibold text-foreground">CodeMirror Lite</h1>
+          <h1 className="text-xl font-semibold text-foreground">Code NO</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={saveActiveFile} title="Save Active File (Ctrl+S)">
@@ -43,7 +43,7 @@ export function AppLayout() {
           <ThemeToggle />
         </div>
       </header>
-      <main className="flex-grow overflow-hidden"> {/* Corrected class name */}
+      <main className="flex-grow overflow-hidden">
         <PanelGroup direction="horizontal" className="h-full w-full">
           {/* Left Panel: File Explorer */}
           <Panel id="file-explorer" defaultSize={20} minSize={15} maxSize={35} collapsible={true} className="bg-card">
