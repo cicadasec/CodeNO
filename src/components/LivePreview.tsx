@@ -2,45 +2,89 @@
 "use client";
 import React, { useEffect, useState, useRef } from 'react';
 import { useAppContext } from '@/contexts/AppContext';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { ExternalLink } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 export function LivePreview() {
-  const { activeFileId, getFormattedContent, fileContents } = useAppContext(); // Using fileContents to trigger updates
+  const { activeFileId, getFormattedContent, fileContents, fileSystem } = useAppContext();
   const [iframeContent, setIframeContent] = useState<string>('');
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (activeFileId) {
-      // Use a timeout to debounce updates for performance, especially on fast typing
       const handler = setTimeout(() => {
         const content = getFormattedContent(activeFileId);
         setIframeContent(content);
-      }, 300); // Adjust delay as needed
+      }, 300);
 
       return () => clearTimeout(handler);
     } else {
       setIframeContent('');
     }
-  }, [activeFileId, getFormattedContent, fileContents]); // Depend on fileContents to re-render when any file changes
+  }, [activeFileId, getFormattedContent, fileContents]);
 
-  // Security note: While srcDoc is generally safer than src with data URI for same-origin content,
-  // sandboxing is still a good idea if user-generated content could be malicious.
-  // For this app, assuming local code editing, it's less critical but good practice.
+  const handleOpenInNewTab = () => {
+    if (iframeContent) {
+      const newTab = window.open('', '_blank');
+      if (newTab) {
+        newTab.document.open();
+        const activeFileName = activeFileId ? fileSystem[activeFileId]?.name : "Preview";
+        newTab.document.title = `${activeFileName} - Preview - Code NO`;
+        newTab.document.write(iframeContent);
+        newTab.document.close();
+      } else {
+        toast({
+          title: "Popup Blocked",
+          description: "Please allow popups for this site to open the preview in a new tab.",
+          variant: "destructive",
+        });
+      }
+    }
+  };
+
+  const activeFile = activeFileId ? fileSystem[activeFileId] : null;
+  const canPreview = activeFile && activeFile.name.endsWith('.html');
+
+
   return (
-    <div className="h-full w-full bg-white">
-      {iframeContent ? (
-        <iframe
-          ref={iframeRef}
-          srcDoc={iframeContent}
-          title="Live Preview"
-          className="h-full w-full border-none"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals" // Adjust sandbox rules as needed
-        />
-      ) : (
-         <div className="flex items-center justify-center h-full bg-muted text-muted-foreground">
-            <p>Preview will appear here for HTML files.</p>
-        </div>
-      )}
+    <div className="h-full w-full flex flex-col bg-background">
+      <div className="p-2 border-b flex justify-between items-center bg-card h-12 shrink-0">
+        <span className="text-sm font-medium text-card-foreground">
+          {activeFile && canPreview ? `${activeFile.name} - Preview` : "Live Preview"}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleOpenInNewTab}
+          disabled={!iframeContent || !canPreview}
+          title="Open preview in new tab"
+        >
+          <ExternalLink className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="flex-grow overflow-auto bg-white">
+        {iframeContent && canPreview ? (
+          <iframe
+            ref={iframeRef}
+            srcDoc={iframeContent}
+            title="Live Preview Panel"
+            className="h-full w-full border-none"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full bg-muted text-muted-foreground p-4 text-center">
+            <p>
+              {activeFile ? 
+                (canPreview ? "Generating preview..." : `Live preview is only available for HTML files. Select an HTML file to see its preview.`) :
+                "Select an HTML file to see its live preview."
+              }
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
