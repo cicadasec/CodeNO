@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { AppContextType, FileSystemItem, OpenFile, Theme } from '@/types';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import { toast } from '@/hooks/use-toast';
+import type JSZip from 'jszip';
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -80,6 +81,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const activeFileId = hasMounted ? rawActiveFileId : initialActiveFileId;
   const theme = hasMounted ? rawTheme : initialTheme;
   const currentPathIds = hasMounted ? rawCurrentPath : initialCurrentPath;
+  const rootId = 'root';
 
 
   useEffect(() => {
@@ -412,9 +414,63 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return undefined;
   }, [fileSystem, fileContents, hasMounted]);
 
+  const addItemsToZipRecursive = useCallback((
+    zipFolder: JSZip, 
+    itemId: string,
+    fs: Record<string, FileSystemItem>,
+    fc: Record<string, string>
+  ) => {
+    const item = fs[itemId];
+    if (!item) return;
+
+    if (item.type === 'file') {
+      const content = fc[item.id] || '';
+      zipFolder.file(item.name, content);
+    } else if (item.type === 'folder') {
+      const folder = zipFolder.folder(item.name);
+      if (folder && item.childrenIds) {
+        item.childrenIds.forEach(childId => {
+          addItemsToZipRecursive(folder, childId, fs, fc);
+        });
+      }
+    }
+  }, []);
+
+
+  const downloadProject = useCallback(async () => {
+    if (typeof window === 'undefined' || !hasMounted) return;
+
+    const JSZip = (await import('jszip')).default;
+    const zip = new JSZip();
+
+    const projectRoot = fileSystem[rootId];
+    if (projectRoot && projectRoot.type === 'folder' && projectRoot.childrenIds) {
+      projectRoot.childrenIds.forEach(childId => {
+        addItemsToZipRecursive(zip, childId, fileSystem, fileContents);
+      });
+    }
+
+    try {
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const projectName = projectRoot?.name || 'project';
+      link.download = `${projectName}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+      toast({ title: "Success", description: "Project downloaded successfully." });
+    } catch (error) {
+      console.error("Error generating zip:", error);
+      toast({ title: "Error", description: "Failed to download project.", variant: "destructive" });
+    }
+  }, [hasMounted, fileSystem, fileContents, rootId, addItemsToZipRecursive]);
+
+
   const contextValue: AppContextType = {
     fileSystem,
-    rootId: 'root',
+    rootId,
     openFiles,
     activeFileId,
     fileContents,
@@ -425,6 +481,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     currentPath: currentPathIds.map(id => (hasMounted ? rawFileSystem[id]?.name : initialFileSystemData[id]?.name) || 'unknown'),
     isTerminalOpen,
     toggleTerminal,
+    downloadProject,
     currentDirectoryItems, changeDirectory, getFilePath, readFileContent, getAbsolutePath, getItemByPath,
   };
 
@@ -442,3 +499,4 @@ export const useAppContext = (): AppContextType => {
   }
   return context;
 };
+

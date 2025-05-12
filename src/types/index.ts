@@ -40,6 +40,7 @@ export interface AppContextType {
   toggleTheme: () => void;
   getFormattedContent: (fileId: string) => string; // For live preview, potentially combining files
   toggleTerminal: () => void;
+  downloadProject: () => Promise<void>;
 
   // Terminal related
   currentDirectoryItems: () => FileSystemItem[];
@@ -49,4 +50,5 @@ export interface AppContextType {
   getAbsolutePath: (targetPath: string) => string; // Get absolute path string
   getItemByPath: (path: string) => FileSystemItem | null;
 }
+
 

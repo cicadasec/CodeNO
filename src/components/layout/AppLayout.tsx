@@ -12,7 +12,7 @@ import { LivePreview } from '@/components/LivePreview';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Save, Terminal } from 'lucide-react';
+import { Save, Terminal, Download } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 
 const TerminalComponentWithNoSSR = dynamic(
@@ -24,7 +24,7 @@ const TerminalComponentWithNoSSR = dynamic(
 );
 
 export function AppLayout() {
-  const { saveActiveFile, isTerminalOpen, toggleTerminal } = useAppContext();
+  const { saveActiveFile, isTerminalOpen, toggleTerminal, downloadProject } = useAppContext();
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
@@ -37,7 +37,10 @@ export function AppLayout() {
           <Button variant="ghost" size="icon" onClick={saveActiveFile} title="Save Active File (Ctrl+S)">
             <Save className="h-5 w-5" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={toggleTerminal} title="Launch Terminal">
+          <Button variant="ghost" size="icon" onClick={downloadProject} title="Download Project as ZIP">
+            <Download className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={toggleTerminal} title="Toggle Terminal Panel">
             <Terminal className="h-5 w-5" />
           </Button>
           <ThemeToggle />
