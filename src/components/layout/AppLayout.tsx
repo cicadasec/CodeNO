@@ -30,10 +30,7 @@ export function AppLayout() {
     <div className="h-screen w-screen flex flex-col overflow-hidden">
       <header className="h-12 border-b px-4 flex items-center justify-between shrink-0 bg-card">
         <div className="flex items-center gap-2">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6 text-primary">
-            <path d="M10 10l4 4m0-4l-4 4"/>
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-          </svg>
+          <Terminal className="h-6 w-6 text-primary" />
           <h1 className="text-xl font-semibold text-foreground">Code NO</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -87,3 +84,4 @@ export function AppLayout() {
     </div>
   );
 }
+
