@@ -51,7 +51,7 @@ export function LivePreview() {
   return (
     <div className="h-full w-full flex flex-col bg-background">
       <div className="p-2 border-b flex justify-between items-center bg-card h-12 shrink-0">
-        <span className="text-sm font-medium text-card-foreground">
+        <span className="text-sm font-medium text-card-foreground truncate max-w-[calc(100%-3rem)]">
           {activeFile && canPreview ? `${activeFile.name} - Preview` : "Live Preview"}
         </span>
         <Button
