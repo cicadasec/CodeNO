@@ -10,7 +10,7 @@ export interface FileSystemItem {
 }
 
 export interface OpenFile {
-  id: string;
+  id:string;
   name: string;
   // originalContentHash?: string; // For tracking unsaved changes, optional
 }
@@ -25,6 +25,7 @@ export interface AppContextType {
   fileContents: Record<string, string>; // id -> content
   theme: Theme;
   currentPath: string[]; // Array of folder names representing current path in terminal
+  isTerminalOpen: boolean;
 
   addFile: (name: string, parentId: string) => void;
   addFolder: (name: string, parentId: string) => void;
@@ -38,6 +39,7 @@ export interface AppContextType {
   saveActiveFile: () => void;
   toggleTheme: () => void;
   getFormattedContent: (fileId: string) => string; // For live preview, potentially combining files
+  toggleTerminal: () => void;
 
   // Terminal related
   currentDirectoryItems: () => FileSystemItem[];
@@ -47,3 +49,4 @@ export interface AppContextType {
   getAbsolutePath: (targetPath: string) => string; // Get absolute path string
   getItemByPath: (path: string) => FileSystemItem | null;
 }
+

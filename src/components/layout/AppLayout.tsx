@@ -12,7 +12,7 @@ import { LivePreview } from '@/components/LivePreview';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Save } from 'lucide-react';
+import { Save, Terminal } from 'lucide-react';
 import { useAppContext } from '@/contexts/AppContext';
 
 const TerminalComponentWithNoSSR = dynamic(
@@ -24,7 +24,7 @@ const TerminalComponentWithNoSSR = dynamic(
 );
 
 export function AppLayout() {
-  const { saveActiveFile } = useAppContext();
+  const { saveActiveFile, isTerminalOpen, toggleTerminal } = useAppContext();
 
   return (
     <div className="h-screen w-screen flex flex-col overflow-hidden">
@@ -39,6 +39,9 @@ export function AppLayout() {
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" onClick={saveActiveFile} title="Save Active File (Ctrl+S)">
             <Save className="h-5 w-5" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={toggleTerminal} title="Launch Terminal">
+            <Terminal className="h-5 w-5" />
           </Button>
           <ThemeToggle />
         </div>
@@ -55,19 +58,21 @@ export function AppLayout() {
 
           {/* Middle Panel: Editor and Terminal */}
           <Panel id="middle-content" defaultSize={50} minSize={30}>
-            <PanelGroup direction="vertical" className="h-full">
-              {/* Top: Editor Pane */}
-              <Panel id="editor-pane" defaultSize={65} minSize={30}>
-                <EditorPane />
-              </Panel>
-              <PanelResizeHandle className="resize-handle-vertical h-[1px] bg-border data-[resize-handle-active]:bg-primary transition-colors">
-                <div className="w-full h-full" />
-              </PanelResizeHandle>
-              {/* Bottom: Terminal */}
-              <Panel id="terminal-pane" defaultSize={35} minSize={20} collapsible={true}>
-                <TerminalComponentWithNoSSR />
-              </Panel>
-            </PanelGroup>
+            {isTerminalOpen ? (
+              <PanelGroup direction="vertical" className="h-full">
+                <Panel id="editor-pane" defaultSize={65} minSize={30}>
+                  <EditorPane />
+                </Panel>
+                <PanelResizeHandle className="resize-handle-vertical h-[1px] bg-border data-[resize-handle-active]:bg-primary transition-colors">
+                  <div className="w-full h-full" />
+                </PanelResizeHandle>
+                <Panel id="terminal-pane" defaultSize={35} minSize={20} collapsible={true}>
+                  <TerminalComponentWithNoSSR />
+                </Panel>
+              </PanelGroup>
+            ) : (
+              <EditorPane />
+            )}
           </Panel>
           <PanelResizeHandle className="resize-handle-horizontal w-[1px] bg-border data-[resize-handle-active]:bg-primary transition-colors">
             <div className="w-full h-full" />

@@ -27,7 +27,7 @@ const initialFileContents: Record<string, string> = {
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Hello, CodeMirror!</h1>
+    <h1>Hello, Code NO!</h1>
     <p>Edit this content and see the live preview update.</p>
     <script src="script.js"></script>
 </body>
@@ -61,12 +61,14 @@ const initialCurrentPath: string[] = ['root'];
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [hasMounted, setHasMounted] = useState(false);
 
-  const [rawFileSystem, setRawFileSystem] = useLocalStorage<Record<string, FileSystemItem>>('codemirror-fs', initialFileSystemData);
-  const [rawFileContents, setRawFileContents] = useLocalStorage<Record<string, string>>('codemirror-fc', initialFileContents);
-  const [rawOpenFiles, setRawOpenFiles] = useLocalStorage<OpenFile[]>('codemirror-openfiles', initialOpenFiles);
-  const [rawActiveFileId, setRawActiveFileIdState] = useLocalStorage<string | null>('codemirror-activefile', initialActiveFileId);
-  const [rawTheme, setRawThemeState] = useLocalStorage<Theme>('codemirror-theme', initialTheme);
-  const [rawCurrentPath, setRawCurrentPath] = useLocalStorage<string[]>('codemirror-currentpath', initialCurrentPath); // Path IDs
+  const [rawFileSystem, setRawFileSystem] = useLocalStorage<Record<string, FileSystemItem>>('codeno-fs', initialFileSystemData);
+  const [rawFileContents, setRawFileContents] = useLocalStorage<Record<string, string>>('codeno-fc', initialFileContents);
+  const [rawOpenFiles, setRawOpenFiles] = useLocalStorage<OpenFile[]>('codeno-openfiles', initialOpenFiles);
+  const [rawActiveFileId, setRawActiveFileIdState] = useLocalStorage<string | null>('codeno-activefile', initialActiveFileId);
+  const [rawTheme, setRawThemeState] = useLocalStorage<Theme>('codeno-theme', initialTheme);
+  const [rawCurrentPath, setRawCurrentPath] = useLocalStorage<string[]>('codeno-currentpath', initialCurrentPath); // Path IDs
+  const [isTerminalOpen, setIsTerminalOpen] = useState(false);
+
 
   useEffect(() => {
     setHasMounted(true);
@@ -88,6 +90,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const toggleTheme = useCallback(() => {
     setRawThemeState(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
   }, [setRawThemeState]);
+
+  const toggleTerminal = useCallback(() => {
+    setIsTerminalOpen(prev => !prev);
+  }, []);
 
   const setActiveFileId = useCallback((id: string | null) => {
     setRawActiveFileIdState(id);
@@ -212,15 +218,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const closeFile = useCallback((id: string) => {
     setRawOpenFiles(prev => prev.filter(f => f.id !== id));
     if (activeFileId === id) {
-      const remainingFiles = openFiles.filter(f => f.id !== id); // uses potentially stale openFiles from closure
       // To get the latest openFiles state if relying on it for next active:
       setRawOpenFiles(currentOpenFiles => {
         const filtered = currentOpenFiles.filter(f => f.id !==id);
-        setActiveFileId(filtered.length > 0 ? filtered[0].id : null);
+        setActiveFileId(filtered.length > 0 ? filtered[filtered.length -1].id : null);
         return filtered;
       })
     }
-  }, [activeFileId, openFiles, setRawOpenFiles, setActiveFileId]);
+  }, [activeFileId, setRawOpenFiles, setActiveFileId]);
 
 
   const updateFileContent = useCallback((id: string, content: string) => {
@@ -244,34 +249,50 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const content = fileContents[fileId] || '';
 
     if (file.name.endsWith('.html')) {
-      const parentDir = fileSystem[file.parentId!];
+      // Find the parent directory of the HTML file
+      const parentDirId = file.parentId;
+      if (!parentDirId) return content; // Should not happen if fileSystem is consistent
+
+      const parentDir = fileSystem[parentDirId];
+      if (!parentDir || parentDir.type !== 'folder' || !parentDir.childrenIds) return content;
+
       let cssContent = '';
       let jsContent = '';
 
-      if (parentDir && parentDir.childrenIds) {
-        const styleFile = parentDir.childrenIds.map(id => fileSystem[id]).find(item => item?.name === 'style.css');
-        if (styleFile && fileContents[styleFile.id]) {
-          cssContent = `<style>\n${fileContents[styleFile.id]}\n</style>`;
-        }
-        
-        const scriptFile = parentDir.childrenIds.map(id => fileSystem[id]).find(item => item?.name === 'script.js');
-        if (scriptFile && fileContents[scriptFile.id]) {
-          jsContent = `<script>\n${fileContents[scriptFile.id]}\n</script>`;
-        }
+      // Look for style.css in the same directory
+      const styleFile = parentDir.childrenIds
+        .map(id => fileSystem[id])
+        .find(item => item?.name === 'style.css' && item.type === 'file');
+      
+      if (styleFile && fileContents[styleFile.id]) {
+        cssContent = `<style>\n${fileContents[styleFile.id]}\n</style>`;
+      }
+      
+      // Look for script.js in the same directory
+      const scriptFile = parentDir.childrenIds
+        .map(id => fileSystem[id])
+        .find(item => item?.name === 'script.js' && item.type === 'file');
+
+      if (scriptFile && fileContents[scriptFile.id]) {
+        jsContent = `<script>\n${fileContents[scriptFile.id]}\n</script>`;
       }
       
       let html = content;
+      // Inject CSS into <head>
       if (cssContent) {
         if (html.includes("</head>")) {
           html = html.replace("</head>", `${cssContent}\n</head>`);
         } else {
+          // Fallback if no </head> tag
           html = `${cssContent}\n${html}`; 
         }
       }
+      // Inject JS before </body>
       if (jsContent) {
          if (html.includes("</body>")) {
           html = html.replace("</body>", `${jsContent}\n</body>`);
         } else {
+          // Fallback if no </body> tag
           html = `${html}\n${jsContent}`;
         }
       }
@@ -282,7 +303,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const getCurrentDirectoryId = useCallback(() => currentPathIds[currentPathIds.length - 1] || 'root', [currentPathIds]);
   
-  const currentDirectoryItems = useCallback(() => {
+  const currentDirectoryItems = useCallback((): FileSystemItem[] => {
     if (!hasMounted) return []; // Don't compute if not mounted / fileSystem is initial
     const dirId = getCurrentDirectoryId();
     const dir = fileSystem[dirId];
@@ -293,19 +314,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [fileSystem, getCurrentDirectoryId, hasMounted]);
 
   const getItemByPath = useCallback((path: string): FileSystemItem | null => {
-    if (!hasMounted && path !== '/' && path !== '') return null; // Avoid complex logic if not mounted, allow root
+    if (!hasMounted && path !== '/' && path !== '') return null; 
     const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
     const currentFsCurrentPathIds = hasMounted ? rawCurrentPath : initialCurrentPath;
     
     const parts = path.split('/').filter(p => p);
-    let currentItemId = currentFsCurrentPathIds[currentFsCurrentPathIds.length -1] || 'root';
+    let currentItemId : string;
 
-    if (path === '/' || path === '') return currentFs['root'];
-    
-    if (!path.startsWith('/')) {
-      // currentItemId is already set to the last ID of current path
-    } else {
-        currentItemId = 'root'; // Absolute path starts from root
+    if (path.startsWith('/')) { // Absolute path
+        currentItemId = 'root';
+         if (parts.length === 0) return currentFs['root']; // Path is just "/"
+    } else { // Relative path
+        currentItemId = currentFsCurrentPathIds[currentFsCurrentPathIds.length -1] || 'root';
+        if (parts.length === 0 && path === '') return currentFs[currentItemId]; // Path is empty string (current dir)
+         if (parts.length === 0 && path !== '') return null; // e.g. "a/"
     }
     
     for (const part of parts) {
@@ -314,8 +336,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const currentItem = currentFs[currentItemId];
         if (currentItem && currentItem.parentId) {
           currentItemId = currentItem.parentId;
-        } else {
-          return null; 
+        } else if (currentItemId === 'root') {
+          // Trying to 'cd ..' from root, stay at root or error. Let's stay at root.
+          // If strict behavior is needed to return null: return null;
+          continue; 
+        }
+         else {
+          return null; // Parent doesn't exist and not at root
         }
         continue;
       }
@@ -351,7 +378,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const getAbsolutePath = useCallback((targetPathInput: string): string => {
     if (!hasMounted && targetPathInput !== '/') return "/";
     const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
-    const item = getItemByPath(targetPathInput); // getItemByPath now respects hasMounted
+    const item = getItemByPath(targetPathInput); 
     if (!item) return "/"; 
     
     const pathParts: string[] = [];
@@ -396,6 +423,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     addFile, addFolder, renameItem, deleteItem, openFile, closeFile, setActiveFileId,
     updateFileContent, saveFile, saveActiveFile, getFormattedContent,
     currentPath: currentPathIds.map(id => (hasMounted ? rawFileSystem[id]?.name : initialFileSystemData[id]?.name) || 'unknown'),
+    isTerminalOpen,
+    toggleTerminal,
     currentDirectoryItems, changeDirectory, getFilePath, readFileContent, getAbsolutePath, getItemByPath,
   };
 
