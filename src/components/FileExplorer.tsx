@@ -177,7 +177,7 @@ export function FileExplorer({}: FileExplorerProps) {
   return (
     <div className="h-full flex flex-col bg-card text-card-foreground p-2 border-r">
       <input type="file" ref={fileInputRef} onChange={handleOpenFiles} multiple style={{ display: 'none' }} accept="*/*"/>
-      <input type="file" ref={folderInputRef} onChange={handleOpenFolder} webkitdirectory directory multiple style={{ display: 'none' }} />
+      <input type="file" ref={folderInputRef} onChange={handleOpenFolder} webkitdirectory="true" directory="true" multiple style={{ display: 'none' }} />
 
       <div className="flex justify-between items-center mb-2 p-1">
         <h2 className="text-lg font-semibold select-none">{rootItem?.name || 'Files'}</h2>
