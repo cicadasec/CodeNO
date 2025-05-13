@@ -36,7 +36,8 @@ export function AppLayout() {
   const togglePanel = useCallback((panelRef: React.RefObject<ImperativePanelHandle>) => {
     const panel = panelRef.current;
     if (panel) {
-      if (panel.getCollapsed()) {
+      // A panel is collapsed if its size is 0 (given collapsedSize={0})
+      if (panel.getSize() === 0) {
         panel.expand();
       } else {
         panel.collapse();
@@ -45,18 +46,24 @@ export function AppLayout() {
   }, []);
 
   useEffect(() => {
+    // This effect should run after initial mount and `isMobile` is determined.
+    // We ensure refs are current before calling methods on them.
     if (isMobile) {
-      // Collapse panels on mobile after initial mount and isMobile is determined
-      // This might cause a brief flicker if panels are initially expanded by defaultSize
-      // A more complex solution would involve managing sizes based on isMobile from the start
-      fileExplorerPanelRef.current?.collapse();
-      previewPanelRef.current?.collapse();
+      if (fileExplorerPanelRef.current?.getSize() !== 0) {
+        fileExplorerPanelRef.current?.collapse();
+      }
+      if (previewPanelRef.current?.getSize() !== 0) {
+        previewPanelRef.current?.collapse();
+      }
     } else {
-      // Optionally expand panels on desktop if they were collapsed
-      // This ensures that if a user resizes from mobile to desktop, panels become visible
-      // Consider if this is the desired behavior or if they should retain their last state
-      fileExplorerPanelRef.current?.expand(); // Or restore previous size if saved
-      previewPanelRef.current?.expand();   // Or restore previous size if saved
+      // On desktop, expand panels if they are collapsed, or restore previous size if logic was implemented.
+      // For now, just expand if they were collapsed (e.g., by mobile view).
+      if (fileExplorerPanelRef.current?.getSize() === 0) {
+         fileExplorerPanelRef.current?.expand();
+      }
+      if (previewPanelRef.current?.getSize() === 0) {
+         previewPanelRef.current?.expand();
+      }
     }
   }, [isMobile]);
 
@@ -147,3 +154,4 @@ export function AppLayout() {
     </div>
   );
 }
+
