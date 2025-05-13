@@ -1,3 +1,4 @@
+
 export type FileSystemItemType = 'file' | 'folder';
 
 export interface FileSystemItem {
@@ -41,6 +42,9 @@ export interface AppContextType {
   getFormattedContent: (fileId: string) => string; // For live preview, potentially combining files
   toggleTerminal: () => void;
   downloadProject: () => Promise<void>;
+  openProjectFolder: (files: FileList) => Promise<void>;
+  addFilesToRoot: (files: FileList) => Promise<void>;
+
 
   // Terminal related
   currentDirectoryItems: () => FileSystemItem[];
@@ -50,5 +54,4 @@ export interface AppContextType {
   getAbsolutePath: (targetPath: string) => string; // Get absolute path string
   getItemByPath: (path: string) => FileSystemItem | null;
 }
-
 

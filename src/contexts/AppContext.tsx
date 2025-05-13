@@ -1,7 +1,8 @@
+
 "use client";
 import type { ReactNode } from 'react';
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { AppContextType, FileSystemItem, OpenFile, Theme } from '@/types';
+import type { AppContextType, FileSystemItem, OpenFile, Theme, FileSystemItemType } from '@/types';
 import useLocalStorage from '@/hooks/useLocalStorage';
 import { toast } from '@/hooks/use-toast';
 import type JSZip from 'jszip';
@@ -102,12 +103,13 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [setRawActiveFileIdState]);
 
   const addFile = useCallback((name: string, parentId: string) => {
-    const parent = fileSystem[parentId];
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const parent = currentFs[parentId];
     if (!parent || parent.type !== 'folder') {
       toast({ title: "Error", description: "Parent must be a folder.", variant: "destructive" });
       return;
     }
-    if (parent.childrenIds?.some(childId => fileSystem[childId]?.name === name)) {
+    if (parent.childrenIds?.some(childId => currentFs[childId]?.name === name)) {
       toast({ title: "Error", description: `File or folder named "${name}" already exists in this directory.`, variant: "destructive" });
       return;
     }
@@ -121,15 +123,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }));
     setRawFileContents(prev => ({ ...prev, [id]: '' }));
     toast({ title: "Success", description: `File "${name}" created.` });
-  }, [fileSystem, setRawFileSystem, setRawFileContents]);
+  }, [hasMounted, rawFileSystem, setRawFileSystem, setRawFileContents]);
 
   const addFolder = useCallback((name: string, parentId: string) => {
-    const parent = fileSystem[parentId];
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const parent = currentFs[parentId];
      if (!parent || parent.type !== 'folder') {
       toast({ title: "Error", description: "Parent must be a folder.", variant: "destructive" });
       return;
     }
-    if (parent.childrenIds?.some(childId => fileSystem[childId]?.name === name)) {
+    if (parent.childrenIds?.some(childId => currentFs[childId]?.name === name)) {
       toast({ title: "Error", description: `File or folder named "${name}" already exists in this directory.`, variant: "destructive" });
       return;
     }
@@ -141,13 +144,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       [parentId]: { ...prev[parentId], childrenIds: [...(prev[parentId]?.childrenIds || []), id] }
     }));
     toast({ title: "Success", description: `Folder "${name}" created.` });
-  }, [fileSystem, setRawFileSystem]);
+  }, [hasMounted, rawFileSystem, setRawFileSystem]);
 
   const renameItem = useCallback((id: string, newName: string) => {
-    const item = fileSystem[id];
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const item = currentFs[id];
     if (!item) return;
-    const parent = item.parentId ? fileSystem[item.parentId] : null;
-    if (parent && parent.childrenIds?.some(childId => childId !== id && fileSystem[childId]?.name === newName)) {
+    const parent = item.parentId ? currentFs[item.parentId] : null;
+    if (parent && parent.childrenIds?.some(childId => childId !== id && currentFs[childId]?.name === newName)) {
       toast({ title: "Error", description: `An item named "${newName}" already exists in this directory.`, variant: "destructive" });
       return;
     }
@@ -155,7 +159,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setRawFileSystem(prev => ({ ...prev, [id]: { ...prev[id], name: newName } }));
     setRawOpenFiles(prevOpen => prevOpen.map(f => f.id === id ? {...f, name: newName} : f));
     toast({ title: "Success", description: `Item renamed to "${newName}".` });
-  }, [fileSystem, setRawFileSystem, setRawOpenFiles]);
+  }, [hasMounted, rawFileSystem, setRawFileSystem, setRawOpenFiles]);
 
   const deleteItemRecursive = useCallback((itemId: string, currentFs: Record<string, FileSystemItem>, currentFc: Record<string, string>) => {
     const item = currentFs[itemId];
@@ -192,42 +196,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       toast({ title: "Error", description: "Cannot delete root project folder.", variant: "destructive" });
       return;
     }
-    const item = fileSystem[id];
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const currentFc = hasMounted ? rawFileContents : initialFileContents;
+    const currentOpenFiles = hasMounted ? rawOpenFiles : initialOpenFiles;
+    const currentActiveFileId = hasMounted ? rawActiveFileId : initialActiveFileId;
+
+    const item = currentFs[id];
     if (!item) return;
 
-    const { updatedFs, updatedFc } = deleteItemRecursive(id, fileSystem, fileContents);
+    const { updatedFs, updatedFc } = deleteItemRecursive(id, currentFs, currentFc);
     
     setRawFileSystem(updatedFs);
     setRawFileContents(updatedFc);
 
     setRawOpenFiles(prevOpen => prevOpen.filter(f => f.id !== id && !Object.keys(updatedFc).includes(f.id)));
 
-    if (activeFileId === id || (item.type === 'folder' && openFiles.some(f => f.id.startsWith(id)))) {
+    if (currentActiveFileId === id || (item.type === 'folder' && currentOpenFiles.some(f => {
+        let currentItem = updatedFs[f.id];
+        while(currentItem) {
+            if (currentItem.id === id) return true;
+            if (!currentItem.parentId) break;
+            currentItem = updatedFs[currentItem.parentId];
+        }
+        return false;
+    }))) {
       setActiveFileId(null);
     }
     toast({ title: "Success", description: `Item "${item.name}" deleted.` });
-  }, [fileSystem, fileContents, activeFileId, openFiles, deleteItemRecursive, setRawFileSystem, setRawFileContents, setRawOpenFiles, setActiveFileId]);
+  }, [hasMounted, rawFileSystem, rawFileContents, rawOpenFiles, rawActiveFileId, deleteItemRecursive, setRawFileSystem, setRawFileContents, setRawOpenFiles, setActiveFileId]);
   
   const openFile = useCallback((id: string) => {
-    const item = fileSystem[id];
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const currentOpenFs = hasMounted ? rawOpenFiles : initialOpenFiles;
+
+    const item = currentFs[id];
     if (!item || item.type !== 'file') return;
-    if (!openFiles.find(f => f.id === id)) {
+    if (!currentOpenFs.find(f => f.id === id)) {
       setRawOpenFiles(prev => [...prev, { id, name: item.name }]);
     }
     setActiveFileId(id);
-  }, [fileSystem, openFiles, setRawOpenFiles, setActiveFileId]);
+  }, [hasMounted, rawFileSystem, rawOpenFiles, setRawOpenFiles, setActiveFileId]);
 
   const closeFile = useCallback((id: string) => {
-    setRawOpenFiles(prev => prev.filter(f => f.id !== id));
-    if (activeFileId === id) {
-      // To get the latest openFiles state if relying on it for next active:
-      setRawOpenFiles(currentOpenFiles => {
-        const filtered = currentOpenFiles.filter(f => f.id !==id);
-        setActiveFileId(filtered.length > 0 ? filtered[filtered.length -1].id : null);
+    const currentActiveFileId = hasMounted ? rawActiveFileId : initialActiveFileId;
+    setRawOpenFiles(prev => {
+        const filtered = prev.filter(f => f.id !== id);
+        if (currentActiveFileId === id) {
+          setActiveFileId(filtered.length > 0 ? filtered[filtered.length -1].id : null);
+        }
         return filtered;
-      })
-    }
-  }, [activeFileId, setRawOpenFiles, setActiveFileId]);
+      });
+  }, [hasMounted, rawActiveFileId, setRawOpenFiles, setActiveFileId]);
 
 
   const updateFileContent = useCallback((id: string, content: string) => {
@@ -235,101 +254,102 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [setRawFileContents]);
 
   const saveFile = useCallback((id: string) => {
-    toast({ title: "Saved", description: `${fileSystem[id]?.name} saved.` });
-  }, [fileSystem]);
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    toast({ title: "Saved", description: `${currentFs[id]?.name} saved.` });
+  }, [hasMounted, rawFileSystem]);
 
   const saveActiveFile = useCallback(() => {
-    if (activeFileId) {
-      saveFile(activeFileId);
+    const currentActiveFileId = hasMounted ? rawActiveFileId : initialActiveFileId;
+    if (currentActiveFileId) {
+      saveFile(currentActiveFileId);
     }
-  }, [activeFileId, saveFile]);
+  }, [hasMounted, rawActiveFileId, saveFile]);
 
   const getFormattedContent = useCallback((fileId: string): string => {
-    const file = fileSystem[fileId];
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+    const currentFc = hasMounted ? rawFileContents : initialFileContents;
+
+    const file = currentFs[fileId];
     if (!file || file.type !== 'file') return '';
     
-    const content = fileContents[fileId] || '';
+    const content = currentFc[fileId] || '';
 
     if (file.name.endsWith('.html')) {
-      // Find the parent directory of the HTML file
       const parentDirId = file.parentId;
-      if (!parentDirId) return content; // Should not happen if fileSystem is consistent
+      if (!parentDirId) return content; 
 
-      const parentDir = fileSystem[parentDirId];
+      const parentDir = currentFs[parentDirId];
       if (!parentDir || parentDir.type !== 'folder' || !parentDir.childrenIds) return content;
 
       let cssContent = '';
       let jsContent = '';
 
-      // Look for style.css in the same directory
       const styleFile = parentDir.childrenIds
-        .map(id => fileSystem[id])
+        .map(id => currentFs[id])
         .find(item => item?.name === 'style.css' && item.type === 'file');
       
-      if (styleFile && fileContents[styleFile.id]) {
-        cssContent = `<style>\n${fileContents[styleFile.id]}\n</style>`;
+      if (styleFile && currentFc[styleFile.id]) {
+        cssContent = `<style>\n${currentFc[styleFile.id]}\n</style>`;
       }
       
-      // Look for script.js in the same directory
       const scriptFile = parentDir.childrenIds
-        .map(id => fileSystem[id])
+        .map(id => currentFs[id])
         .find(item => item?.name === 'script.js' && item.type === 'file');
 
-      if (scriptFile && fileContents[scriptFile.id]) {
-        jsContent = `<script>\n${fileContents[scriptFile.id]}\n</script>`;
+      if (scriptFile && currentFc[scriptFile.id]) {
+        jsContent = `<script>\n${currentFc[scriptFile.id]}\n</script>`;
       }
       
       let html = content;
-      // Inject CSS into <head>
       if (cssContent) {
         if (html.includes("</head>")) {
           html = html.replace("</head>", `${cssContent}\n</head>`);
         } else {
-          // Fallback if no </head> tag
           html = `${cssContent}\n${html}`; 
         }
       }
-      // Inject JS before </body>
       if (jsContent) {
          if (html.includes("</body>")) {
           html = html.replace("</body>", `${jsContent}\n</body>`);
         } else {
-          // Fallback if no </body> tag
           html = `${html}\n${jsContent}`;
         }
       }
       return html;
     }
     return content;
-  }, [fileSystem, fileContents]);
+  }, [hasMounted, rawFileSystem, rawFileContents]);
 
-  const getCurrentDirectoryId = useCallback(() => currentPathIds[currentPathIds.length - 1] || 'root', [currentPathIds]);
+  const getCurrentDirectoryId = useCallback(() => {
+    const currentPath = hasMounted ? rawCurrentPath : initialCurrentPath;
+    return currentPath[currentPath.length - 1] || 'root';
+  }, [hasMounted, rawCurrentPath]);
   
   const currentDirectoryItems = useCallback((): FileSystemItem[] => {
-    if (!hasMounted) return []; // Don't compute if not mounted / fileSystem is initial
+    if (!hasMounted) return []; 
+    const currentFs = rawFileSystem; // Use raw directly as hasMounted is true
     const dirId = getCurrentDirectoryId();
-    const dir = fileSystem[dirId];
+    const dir = currentFs[dirId];
     if (dir && dir.type === 'folder' && dir.childrenIds) {
-      return dir.childrenIds.map(id => fileSystem[id]).filter(Boolean) as FileSystemItem[];
+      return dir.childrenIds.map(id => currentFs[id]).filter(Boolean) as FileSystemItem[];
     }
     return [];
-  }, [fileSystem, getCurrentDirectoryId, hasMounted]);
+  }, [rawFileSystem, getCurrentDirectoryId, hasMounted]);
 
   const getItemByPath = useCallback((path: string): FileSystemItem | null => {
-    if (!hasMounted && path !== '/' && path !== '') return null; 
     const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
-    const currentFsCurrentPathIds = hasMounted ? rawCurrentPath : initialCurrentPath;
+    const currentFsCurrentPath = hasMounted ? rawCurrentPath : initialCurrentPath;
     
     const parts = path.split('/').filter(p => p);
     let currentItemId : string;
 
-    if (path.startsWith('/')) { // Absolute path
+    if (path.startsWith('/')) { 
         currentItemId = 'root';
-         if (parts.length === 0) return currentFs['root']; // Path is just "/"
-    } else { // Relative path
-        currentItemId = currentFsCurrentPathIds[currentFsCurrentPathIds.length -1] || 'root';
-        if (parts.length === 0 && path === '') return currentFs[currentItemId]; // Path is empty string (current dir)
-         if (parts.length === 0 && path !== '') return null; // e.g. "a/"
+         if (parts.length === 0) return currentFs['root']; 
+    } else { 
+        currentItemId = currentFsCurrentPath[currentFsCurrentPath.length -1] || 'root';
+        if (parts.length === 0 && path === '') return currentFs[currentItemId]; 
+         if (parts.length === 0 && path !== '') return null; 
     }
     
     for (const part of parts) {
@@ -339,12 +359,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         if (currentItem && currentItem.parentId) {
           currentItemId = currentItem.parentId;
         } else if (currentItemId === 'root') {
-          // Trying to 'cd ..' from root, stay at root or error. Let's stay at root.
-          // If strict behavior is needed to return null: return null;
           continue; 
         }
          else {
-          return null; // Parent doesn't exist and not at root
+          return null; 
         }
         continue;
       }
@@ -362,10 +380,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const changeDirectory = useCallback((path: string): boolean => {
     const targetItem = getItemByPath(path);
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
     if (targetItem && targetItem.type === 'folder') {
       const newPathIds: string[] = [];
-      let current = targetItem;
-      const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+      let current: FileSystemItem | undefined = targetItem; // Allow current to be undefined
       while(current) {
         newPathIds.unshift(current.id);
         if (!current.parentId) break;
@@ -378,13 +396,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [getItemByPath, hasMounted, rawFileSystem, setRawCurrentPath]);
 
   const getAbsolutePath = useCallback((targetPathInput: string): string => {
-    if (!hasMounted && targetPathInput !== '/') return "/";
     const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
     const item = getItemByPath(targetPathInput); 
     if (!item) return "/"; 
     
     const pathParts: string[] = [];
-    let current = item;
+    let current: FileSystemItem | undefined = item;
     while(current && current.id !== 'root') {
         pathParts.unshift(current.name);
         if (!current.parentId) break; 
@@ -396,23 +413,26 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const getFilePath = useCallback((itemName: string): string | null => {
     if (!hasMounted) return null;
+    const currentFs = rawFileSystem;
     const dirId = getCurrentDirectoryId();
-    const dir = fileSystem[dirId];
+    const dir = currentFs[dirId];
     if (dir && dir.type === 'folder' && dir.childrenIds) {
-      const item = dir.childrenIds.map(id => fileSystem[id]).find(child => child?.name === itemName);
+      const item = dir.childrenIds.map(id => currentFs[id]).find(child => child?.name === itemName);
       return item ? item.id : null;
     }
     return null;
-  }, [fileSystem, getCurrentDirectoryId, hasMounted]);
+  }, [rawFileSystem, getCurrentDirectoryId, hasMounted]);
 
   const readFileContent = useCallback((filePathId: string): string | undefined => {
     if (!hasMounted) return undefined;
-    const item = fileSystem[filePathId];
+    const currentFs = rawFileSystem;
+    const currentFc = rawFileContents;
+    const item = currentFs[filePathId];
     if (item && item.type === 'file') {
-      return fileContents[filePathId];
+      return currentFc[filePathId];
     }
     return undefined;
-  }, [fileSystem, fileContents, hasMounted]);
+  }, [rawFileSystem, rawFileContents, hasMounted]);
 
   const addItemsToZipRecursive = useCallback((
     zipFolder: JSZip, 
@@ -439,14 +459,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const downloadProject = useCallback(async () => {
     if (typeof window === 'undefined' || !hasMounted) return;
+    const currentFs = rawFileSystem;
+    const currentFc = rawFileContents;
 
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
 
-    const projectRoot = fileSystem[rootId];
-    if (projectRoot && projectRoot.type === 'folder' && projectRoot.childrenIds) {
-      projectRoot.childrenIds.forEach(childId => {
-        addItemsToZipRecursive(zip, childId, fileSystem, fileContents);
+    const projectRootItem = currentFs[rootId];
+    if (projectRootItem && projectRootItem.type === 'folder' && projectRootItem.childrenIds) {
+      projectRootItem.childrenIds.forEach(childId => {
+        addItemsToZipRecursive(zip, childId, currentFs, currentFc);
       });
     }
 
@@ -454,7 +476,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const blob = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      const projectName = projectRoot?.name || 'project';
+      const projectName = projectRootItem?.name || 'project';
       link.download = `${projectName}.zip`;
       document.body.appendChild(link);
       link.click();
@@ -465,7 +487,153 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       console.error("Error generating zip:", error);
       toast({ title: "Error", description: "Failed to download project.", variant: "destructive" });
     }
-  }, [hasMounted, fileSystem, fileContents, rootId, addItemsToZipRecursive]);
+  }, [hasMounted, rawFileSystem, rawFileContents, rootId, addItemsToZipRecursive]);
+
+  const openProjectFolder = useCallback(async (filesFromInput: FileList) => {
+    if (!filesFromInput || filesFromInput.length === 0) {
+      toast({ title: "No folder selected", description: "Please select a folder to open.", variant: "destructive"});
+      return;
+    }
+
+    const filesArray = Array.from(filesFromInput);
+    const topLevelFolderName = filesArray[0].webkitRelativePath.split('/')[0];
+
+    let newFileSystemState: Record<string, FileSystemItem> = {
+      [rootId]: { id: rootId, name: topLevelFolderName, type: 'folder', parentId: null, childrenIds: [] }
+    };
+    let newFileContentsState: Record<string, string> = {};
+    const fileReadPromises: Promise<{ id: string, content: string }>[] = [];
+    // pathToIdMap maps the string path (e.g., "TopLevelFolder/subfolder") to its generated ID
+    const pathToIdMap: Record<string, string> = { [topLevelFolderName]: rootId };
+
+
+    for (const file of filesArray) {
+      const pathParts = file.webkitRelativePath.split('/'); // e.g., ["MyProject", "src", "index.js"]
+      let currentParentId = rootId;
+      let currentPathAccumulator = pathParts[0]; // This is the topLevelFolderName
+
+      // Ensure the direct children of the root are correctly processed
+      // If pathParts.length is 2, it's a file directly under TopLevelFolder.
+      // If pathParts.length > 2, process intermediate directories.
+      for (let i = 1; i < pathParts.length - 1; i++) { // Iterate through intermediate directory parts
+        const dirName = pathParts[i];
+        currentPathAccumulator += '/' + dirName;
+        
+        let dirId = pathToIdMap[currentPathAccumulator];
+        if (!dirId) {
+          dirId = generateId();
+          newFileSystemState[dirId] = { id: dirId, name: dirName, type: 'folder', parentId: currentParentId, childrenIds: [] };
+          
+          // Initialize childrenIds for parent if it's the first time adding a child
+          if (!newFileSystemState[currentParentId].childrenIds) {
+            newFileSystemState[currentParentId].childrenIds = [];
+          }
+          newFileSystemState[currentParentId].childrenIds!.push(dirId);
+          pathToIdMap[currentPathAccumulator] = dirId;
+        }
+        currentParentId = dirId;
+      }
+
+      // Process the file part
+      const fileName = pathParts[pathParts.length - 1];
+      const fileId = generateId();
+      newFileSystemState[fileId] = { id: fileId, name: fileName, type: 'file', parentId: currentParentId };
+      
+      if (!newFileSystemState[currentParentId].childrenIds) {
+         newFileSystemState[currentParentId].childrenIds = [];
+      }
+      newFileSystemState[currentParentId].childrenIds!.push(fileId);
+
+      fileReadPromises.push(
+        file.text().then(content => ({ id: fileId, content })).catch(err => {
+          console.error(`Error reading file ${file.name}:`, err);
+          toast({title: "File Read Error", description: `Could not read ${file.name}. It might be binary or too large.`, variant: "destructive"});
+          return {id: fileId, content: "// Error reading file content"};
+        })
+      );
+    }
+    
+    try {
+      const resolvedFileContents = await Promise.all(fileReadPromises);
+      resolvedFileContents.forEach(fc => {
+        newFileContentsState[fc.id] = fc.content;
+      });
+
+      setRawFileSystem(newFileSystemState);
+      setRawFileContents(newFileContentsState);
+      setRawOpenFiles([]);
+      setRawActiveFileIdState(null);
+      setRawCurrentPath([rootId]); // Reset terminal path to new project root
+
+      toast({ title: "Project Opened", description: `Folder "${topLevelFolderName}" has been loaded.` });
+    } catch (error) {
+        console.error("Error processing project folder:", error);
+        toast({ title: "Error Opening Project", description: "An unexpected error occurred.", variant: "destructive" });
+    }
+
+  }, [setRawFileSystem, setRawFileContents, setRawOpenFiles, setRawActiveFileIdState, setRawCurrentPath, rootId]);
+
+  const addFilesToRoot = useCallback(async (files: FileList) => {
+    if (!files || files.length === 0) return;
+    const currentFs = hasMounted ? rawFileSystem : initialFileSystemData;
+
+    const filesArray = Array.from(files);
+    let newFilesAddedCount = 0;
+    
+    const fileReadPromises = filesArray.map(file => {
+      // Check for name collision in root
+      const rootItem = currentFs[rootId];
+      if (rootItem && rootItem.childrenIds?.some(childId => currentFs[childId]?.name === file.name)) {
+        toast({ title: "Skipped", description: `File "${file.name}" already exists in the project root.`, variant: "default" });
+        return Promise.resolve(null); // Skip this file
+      }
+      
+      const fileId = generateId();
+      return file.text().then(content => ({
+        id: fileId,
+        name: file.name,
+        content,
+        parentId: rootId
+      })).catch(err => {
+          console.error(`Error reading file ${file.name}:`, err);
+          toast({title: "File Read Error", description: `Could not read ${file.name}. It might be binary or too large.`, variant: "destructive"});
+          return {id: fileId, name: file.name, content: "// Error reading file content", parentId: rootId};
+      });
+    });
+
+    const results = await Promise.all(fileReadPromises);
+    
+    setRawFileSystem(prevFs => {
+      const newFs = {...prevFs};
+      const rootChildren = [...(newFs[rootId]?.childrenIds || [])];
+
+      results.forEach(result => {
+        if (result) {
+          newFs[result.id] = { id: result.id, name: result.name, type: 'file', parentId: result.parentId };
+          if (!rootChildren.includes(result.id)) {
+            rootChildren.push(result.id);
+          }
+          newFilesAddedCount++;
+        }
+      });
+      newFs[rootId] = { ...newFs[rootId], childrenIds: rootChildren };
+      return newFs;
+    });
+
+    setRawFileContents(prevFc => {
+      const newFc = {...prevFc};
+      results.forEach(result => {
+        if (result) {
+          newFc[result.id] = result.content;
+        }
+      });
+      return newFc;
+    });
+    if (newFilesAddedCount > 0) {
+     toast({ title: "Files Added", description: `${newFilesAddedCount} file(s) added to project root.` });
+    }
+
+  }, [hasMounted, rawFileSystem, setRawFileSystem, setRawFileContents, rootId]);
 
 
   const contextValue: AppContextType = {
@@ -478,10 +646,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     toggleTheme,
     addFile, addFolder, renameItem, deleteItem, openFile, closeFile, setActiveFileId,
     updateFileContent, saveFile, saveActiveFile, getFormattedContent,
-    currentPath: currentPathIds.map(id => (hasMounted ? rawFileSystem[id]?.name : initialFileSystemData[id]?.name) || 'unknown'),
+    currentPath: (hasMounted ? rawCurrentPath : initialCurrentPath).map(id => (hasMounted ? rawFileSystem[id]?.name : initialFileSystemData[id]?.name) || 'unknown'),
     isTerminalOpen,
     toggleTerminal,
     downloadProject,
+    openProjectFolder,
+    addFilesToRoot,
     currentDirectoryItems, changeDirectory, getFilePath, readFileContent, getAbsolutePath, getItemByPath,
   };
 
