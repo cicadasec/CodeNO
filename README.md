@@ -1,4 +1,4 @@
-# Firebase Studio
+# Firebase Studiogit sta
 
 This is a NextJS starter in Firebase Studio.
 
